@@ -1,10 +1,10 @@
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//           INSTITUTO POLIT�CNICO DO C�VADO E DO AVE
-//                          2022/2023
-//             ENGENHARIA DE SISTEMAS INFORM�TICOS
-//                    VIS�O POR COMPUTADOR
+//           INSTITUTO POLITECNICO DO CAVADO E DO AVE
+//                          2023/2024
+//             ENGENHARIA DE SISTEMAS INFORMATICOS
+//                    VISAO POR COMPUTADOR
 //
-//             [  DUARTE DUQUE - dduque@ipca.pt  ]
+//             [  Rodrigo, Ruben, Thiago  ]
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 // Desabilita (no MSVC++) warnings de fun��es n�o seguras (fopen, sscanf, etc...)

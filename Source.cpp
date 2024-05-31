@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <chrono>
 #include <opencv2\opencv.hpp>
 #include <opencv2\core.hpp>
 #include <opencv2\highgui.hpp>
@@ -9,10 +10,29 @@ extern "C" {
 #include "vc.h"
 }
 
+void vc_timer(void) {
+	static bool running = false;
+	static std::chrono::steady_clock::time_point previousTime = std::chrono::steady_clock::now();
+
+	if (!running) {
+		running = true;
+	}
+	else {
+		std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
+		std::chrono::steady_clock::duration elapsedTime = currentTime - previousTime;
+
+		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedTime);
+		double nseconds = time_span.count();
+
+		std::cout << "Tempo decorrido: " << nseconds << "segundos" << std::endl;
+		std::cout << "Pressione qualquer tecla para continuar...\n";
+		std::cin.get();
+	}
+}
 
 int main(void) {
 	// Vídeo
-	char videofile[20] = "video.avi";
+	char videofile[20] = "video.mp4";
 	cv::VideoCapture capture;
 	struct
 	{
@@ -27,7 +47,7 @@ int main(void) {
 
 	/* Leitura de vídeo de um ficheiro */
 	/* NOTA IMPORTANTE:
-	O ficheiro video.avi deverá estar localizado no mesmo directório que o ficheiro de código fonte.
+	O ficheiro video.mp4 deverá estar localizado no mesmo directório que o ficheiro de código fonte.
 	*/
 	capture.open(videofile);
 
@@ -51,6 +71,8 @@ int main(void) {
 
 	/* Cria uma janela para exibir o vídeo */
 	cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
+
+	vc_timer();
 
 	cv::Mat frame;
 	while (key != 'q') {
@@ -100,6 +122,7 @@ int main(void) {
 		key = cv::waitKey(1);
 	}
 
+	vc_timer();
 	/* Fecha a janela */
 	cv::destroyWindow("VC - VIDEO");
 

@@ -21,6 +21,9 @@
     <ClCompile Include="vc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\VC-PL-TP\VC-PL-TP\CodigoExemplo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="vc.h">
