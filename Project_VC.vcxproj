@@ -71,8 +71,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\Users\pilar\Downloads\opencv\build\include</IncludePath>
-    <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\Users\pilar\Downloads\opencv\build\x64\vc15\lib</LibraryPath>
+    <IncludePath>C:\Users\Thiago Yabuki\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\opencv\build\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\Thiago Yabuki\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\opencv\build\x64\vc16\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\opencv\build\x64\vc15\lib</LibraryPath>
+    <ExecutablePath>C:\Users\Thiago Yabuki\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\opencv\build\include;$(ExecutablePath)</ExecutablePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ExecutablePath>C:\Users\Thiago Yabuki\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\opencv\build\include;$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -122,17 +126,18 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\Users\Thiago Yabuki\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\opencv\build\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);opencv_world455.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);opencv_world490.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Users\Thiago Yabuki\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\opencv\build\x64\vc16\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\Documents\IPCA\Segundo Ano\Segundo Semestre\Visão de Computadores\VC-PL-TP\VC-PL-TP\CodigoExemplo.cpp" />
     <ClCompile Include="Source.cpp" />
     <ClCompile Include="vc.c" />
   </ItemGroup>

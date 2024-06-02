@@ -1634,8 +1634,3 @@ int vc_binary_open(IVC* src, IVC* dst, int kernel)
 	vc_image_free(temp);
 	return 1;
 }
-
-
-
-
-
