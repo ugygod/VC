@@ -81,3 +81,6 @@ int midpoint_threshold(IVC* src, IVC* dst, int kernel);
 int average_threshold(IVC* src, IVC* dst);
 int global_threshold(IVC* src, IVC* dst, int threshold);
 int vc_binary_open(IVC* src, IVC* dst, int kernel);
+
+
+int vc_desenha_box(IVC* src, OVC* blobs, int nblobs);

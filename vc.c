@@ -672,37 +672,34 @@ int vc_gray_to_rgb(IVC *src, IVC *dst) {
 }
 
 
-int vc_gray_to_binary(IVC *src, IVC *dst, int threshold) {
-	unsigned char *datasrc = (unsigned char*)src->data;
-	int bytesperline_src = src->width*src->channels;
-	int channels_src = src->channels;
-	unsigned char *datadst = (unsigned char*)dst->data;
+int vc_gray_to_binary(IVC* src, IVC* dst, int threshold) {
+	unsigned char* data = (unsigned char*)src->data;
+	unsigned char* data_out = (unsigned char*)dst->data;
 	int width = src->width;
 	int height = src->height;
-	int bytesperline_dst = dst->width*dst->channels;
-	int channels_dst = dst->channels;
+	int bytesperline = src->bytesperline;
+	int channels = src->channels;
+	int bytesperline_out = dst->bytesperline;
+	int channels_out = dst->channels;
 	int x, y;
-	long int pos_src, pos_dst;
+	long int pos, pos_out;
 
-	if ((src->width <= 0) || (src->height <= 0) || (src->data == NULL))return 0;
-	if ((src->width != dst->width) || (src->height != dst->height))return 0;
-	if ((src->channels != 1) || (dst->channels != 1))return 0;
+	// Verificação de erros
+	if ((width <= 0) || (height <= 0) || (data == NULL)) return 0;
+	if ((channels != 1) || (channels_out != 1)) return 0;
+	if ((width != dst->width) || (height != dst->height)) return 0;
 
-	for (y = 0; y < height; y++)
-	{
-		for (x = 0; x < width; x++)
-		{
-			pos_src = y*bytesperline_src + x*channels_src;
-			pos_dst = y*bytesperline_dst + x*channels_dst;
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			pos = y * bytesperline + x * channels;
+			pos_out = y * bytesperline_out + x * channels_out;
 
-			if (datasrc[pos_src] > threshold) {
-				datadst[pos_dst] = 255;
+			if (data[pos] < threshold) {
+				data_out[pos_out] = 255;  // Background
 			}
-			else
-			{
-				datadst[pos_dst] = 0;
+			else {
+				data_out[pos_out] = 0;    // Resistor
 			}
-
 		}
 	}
 
@@ -1632,6 +1629,45 @@ int vc_binary_open(IVC* src, IVC* dst, int kernel)
 	vc_binary_erode(src, temp, kernel);
 	vc_binary_dilate(temp, dst, kernel);
 	vc_image_free(temp);
+	return 1;
+}
+
+
+int vc_desenha_box(IVC* src, OVC* blobs, int nblobs)
+{
+	unsigned char* datasrc = (unsigned char*)src->data;
+	int bytesperline_src = src->width * src->channels;
+	int channels_src = src->channels;
+	int i, xx, yy, pos;
+
+	for (i = 0; i < nblobs; i++)
+	{
+		// Desenha as bordas horizontais
+		for (xx = blobs[i].x; xx <= blobs[i].x + blobs[i].width; xx++) {
+			pos = blobs[i].y * bytesperline_src + xx * channels_src;
+			datasrc[pos] = 0;       // R
+			datasrc[pos + 1] = 255; // G
+			datasrc[pos + 2] = 0;   // B
+
+			pos = (blobs[i].y + blobs[i].height) * bytesperline_src + xx * channels_src;
+			datasrc[pos] = 0;       // R
+			datasrc[pos + 1] = 255; // G
+			datasrc[pos + 2] = 0;   // B
+		}
+
+		// Desenha as bordas verticais
+		for (yy = blobs[i].y; yy <= blobs[i].y + blobs[i].height; yy++) {
+			pos = yy * bytesperline_src + blobs[i].x * channels_src;
+			datasrc[pos] = 0;       // R
+			datasrc[pos + 1] = 255; // G
+			datasrc[pos + 2] = 0;   // B
+
+			pos = yy * bytesperline_src + (blobs[i].x + blobs[i].width) * channels_src;
+			datasrc[pos] = 0;       // R
+			datasrc[pos + 1] = 255; // G
+			datasrc[pos + 2] = 0;   // B
+		}
+	}
 	return 1;
 }
 
