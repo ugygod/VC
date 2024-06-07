@@ -1,10 +1,10 @@
 #include <iostream>
 #include <string>
 #include <chrono>
-#include <opencv2\opencv.hpp>
-#include <opencv2\core.hpp>
-#include <opencv2\highgui.hpp>
-#include <opencv2\videoio.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/videoio.hpp>
 
 extern "C" {
 #include "vc.h"
@@ -25,8 +25,8 @@ void vc_timer(void) {
         std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedTime);
         double nseconds = time_span.count();
 
-        std::cout << "Tempo decorrido: " << nseconds << " segundos" << std::endl;
-        std::cout << "Pressione qualquer tecla para continuar...\n";
+        std::cout << "Elapsed time: " << nseconds << " seconds" << std::endl;
+        std::cout << "Press any key to continue...\n";
         std::cin.get();
     }
 }
@@ -47,18 +47,11 @@ int main(void) {
     int key = 0;
 
     /* Leitura de vídeo de um ficheiro */
-    /* NOTA IMPORTANTE:
-    O ficheiro video.avi deverá estar localizado no mesmo directório que o ficheiro de código fonte.
-    */
     capture.open(videofile);
 
-    /* Em alternativa, abrir captura de vídeo pela Webcam #0 */
-    //capture.open(0, cv::CAP_DSHOW); // Pode-se utilizar apenas capture.open(0);
-
     /* Verifica se foi possível abrir o ficheiro de vídeo */
-    if (!capture.isOpened())
-    {
-        std::cerr << "Erro ao abrir o ficheiro de vídeo!\n";
+    if (!capture.isOpened()) {
+        std::cerr << "Error opening video file!" << std::endl;
         return 1;
     }
 
@@ -72,98 +65,101 @@ int main(void) {
 
     /* Cria uma janela para exibir o vídeo */
     cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
+    cv::namedWindow("VC - HSV", cv::WINDOW_AUTOSIZE);
+    cv::namedWindow("VC - SEGMENTED", cv::WINDOW_AUTOSIZE);
     cv::namedWindow("VC - BINARY", cv::WINDOW_AUTOSIZE);
 
-    // +++++++++++++++++++++++++
-    // +++++++++++++++++++++++++
-
-    // Cria uma nova imagem IVC
-    IVC* imagem = vc_image_new(video.width, video.height, 3, 255);
-    IVC* gray_image = vc_image_new(video.width, video.height, 1, 255);
+    cv::Mat frame;
+    IVC* image = vc_image_new(video.width, video.height, 3, 255);
+    IVC* hsv_image = vc_image_new(video.width, video.height, 3, 255);
+    IVC* segmented_image = vc_image_new(video.width, video.height, 1, 255);
     IVC* binary_image = vc_image_new(video.width, video.height, 1, 255);
     IVC* dilated_image = vc_image_new(video.width, video.height, 1, 255);
-    IVC* labelled_image = vc_image_new(video.width, video.height, 1, 255);
+    IVC* final_image = vc_image_new(video.width, video.height, 3, 255);
 
-    // Verifica se todas as imagens foram alocadas corretamente
-    if (!imagem || !gray_image || !binary_image || !dilated_image || !labelled_image) {
-        std::cerr << "Erro ao alocar memória para as imagens!\n";
-        return 1;
-    }
-
-    cv::Mat frame;
+    unsigned char green[3] = { 0, 255, 0 }; // Color for the bounding box
 
     while (key != 'q') {
         /* Leitura de uma frame do vídeo */
         capture.read(frame);
 
         /* Verifica se conseguiu ler a frame */
-        if (frame.empty()) break;
-
-        /* Número da frame a processar */
-        video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
+        if (frame.empty()) {
+            std::cerr << "Error reading frame from video!" << std::endl;
+            break;
+        }
 
         // Copia dados de imagem da estrutura cv::Mat para uma estrutura IVC
-        memcpy(imagem->data, frame.data, video.width * video.height * 3);
+        memcpy(image->data, frame.data, video.width * video.height * 3);
+        memcpy(final_image->data, frame.data, video.width * video.height * 3);
 
-        // Converte a imagem de RGB para escala de cinza
-        vc_rgb_to_gray(imagem, gray_image);
+        // Convert RGB to HSV
+        vc_rgb_to_hsv(image);
 
-        // Aplica thresholding para binarizar a imagem
-        int threshold = 105;  // Ajuste conforme necessário
-        vc_gray_to_binary(gray_image, binary_image, threshold);
+        // Apply HSV segmentation
+        vc_hsv_segmentation(image, 0, 50, 40, 80, 40, 75);
 
-        // Aplica dilatação à imagem binária
-        int kernel_size = 35;  // Ajuste conforme necessário
-        vc_binary_dilate(binary_image, dilated_image, kernel_size);
+        // Exibe a imagem HSV
+        cv::Mat hsv_frame(cv::Size(video.width, video.height), CV_8UC3, image->data);
+        cv::imshow("VC - HSV", hsv_frame);
 
-        // Cria uma cv::Mat para exibir a imagem binarizada
-        cv::Mat binary_frame(cv::Size(video.width, video.height), CV_8UC1, dilated_image->data);
-
-        // Exibe a imagem binarizada
+        // Convert 3-channel HSV image to binary
+        vc_3_channels_to_binary(image, binary_image);
+        cv::Mat binary_frame(cv::Size(video.width, video.height), CV_8UC1, binary_image->data);
         cv::imshow("VC - BINARY", binary_frame);
 
-        // Detecta blobs na imagem binarizada usando as funções de vc.c
-        int nblobs;
-        OVC* blobs = vc_binary_blob_labelling(dilated_image, labelled_image, &nblobs);
+        // Dilate the binary image with a larger kernel size
+        int kernel_size = 35;
+        cv::Mat dilated_mat;
+        cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(kernel_size, kernel_size));
+        cv::dilate(binary_frame, dilated_mat, kernel);
+        memcpy(dilated_image->data, dilated_mat.data, video.width * video.height);
 
-        if (blobs != NULL) {
-            vc_binary_blob_info(labelled_image, blobs, nblobs);
+        // Detect blobs in the dilated binary image
+        int nlabels;
+        OVC* blobs = vc_binary_blob_labelling(dilated_image, segmented_image, &nlabels);
+        vc_binary_blob_info(segmented_image, blobs, nlabels);
 
-            // Desenha bounding boxes ao redor das resistências detectadas na imagem original
-            vc_desenha_box(imagem, blobs, nblobs);
-
-            // Copia os dados da estrutura IVC de volta para cv::Mat
-            memcpy(frame.data, imagem->data, video.width * video.height * 3);
-
-            // Exibe a frame com bounding boxes
-            cv::imshow("VC - VIDEO", frame);
+        // Filter blobs by size
+        for (int i = 0; i < nlabels; i++) {
+            if (blobs[i].width < 70 || blobs[i].height < 70 || blobs[i].width > 190 || blobs[i].height > 190) {
+                blobs[i].x = -1;
+                blobs[i].y = -1;
+                blobs[i].width = 0;
+                blobs[i].height = 0;
+            }
         }
 
-        // Liberta a memória dos blobs
-        if (blobs != NULL) {
-            free(blobs);
-        }
+        // Draw bounding boxes around the detected blobs on the original image
+        vc_desenha_box(final_image, blobs, nlabels);
 
-        // +++++++++++++++++++++++++
-        // +++++++++++++++++++++++++
+        // Copy image data from IVC structure to cv::Mat
+        memcpy(frame.data, final_image->data, video.width * video.height * 3);
 
-        /* Sai da aplicação, se o utilizador premir a tecla 'q' */
-        key = cv::waitKey(1);
+        // Display the final frame with bounding boxes
+        cv::imshow("VC - VIDEO", frame);
+
+        // Exit the application if the user presses the 'q' key
+        if (cv::waitKey(1) == 'q') break;
     }
 
-    /* Fecha as janelas */
-    cv::destroyWindow("VC - VIDEO");
-    cv::destroyWindow("VC - BINARY");
-
-    /* Fecha o ficheiro de vídeo */
+    // Release the video capture and destroy all windows
     capture.release();
+    cv::destroyAllWindows();
 
-    // Liberta a memória das imagens IVC que haviam sido criadas
-    vc_image_free(imagem);
-    vc_image_free(gray_image);
+    // Free the IVC images
+    vc_image_free(image);
+    vc_image_free(hsv_image);
+    vc_image_free(segmented_image);
     vc_image_free(binary_image);
     vc_image_free(dilated_image);
-    vc_image_free(labelled_image);
+    vc_image_free(final_image);
 
     return 0;
 }
+
+
+
+
+
+

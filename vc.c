@@ -481,9 +481,67 @@ int vc_rgb_to_gray(IVC *src, IVC *dst)
 	return 1;
 }
 
-int vc_rgb_to_hsv(IVC *srcdst)
+// Função para converter uma imagem RGB para uma imagem binária
+int vc_rgb_to_binary(IVC* srcdst)
 {
-	unsigned char *data = (unsigned char *)srcdst->data;
+	unsigned char* data = (unsigned char*)srcdst->data;
+	int width = srcdst->width;
+	int height = srcdst->height;
+	int bytesperline = srcdst->bytesperline;
+	int channels = srcdst->channels;
+	float r, g, b, y, cb, cr;
+	int i, size;
+
+	// Verificação de erros
+	if ((width <= 0) || (height <= 0) || (data == NULL))
+		return 0;
+	if (channels != 3)
+		return 0;
+
+	size = width * height * channels;
+
+	for (i = 0; i < size; i = i + channels)
+	{
+		r = (float)data[i];
+		g = (float)data[i + 1];
+		b = (float)data[i + 2];
+
+		// Conversão de RGB para YCbCr
+		y = 0.299f * r + 0.587f * g + 0.114f * b;
+		cb = 128 - 0.168736f * r - 0.331264f * g + 0.5f * b;
+		cr = 128 + 0.5f * r - 0.418688f * g - 0.081312f * b;
+
+		// Conversão de YCbCr para RGB
+		r = y + 1.402f * (cr - 128);
+		g = y - 0.344136f * (cb - 128) - 0.714136f * (cr - 128);
+		b = y + 1.772f * (cb - 128);
+
+		// Conversão de RGB para binário
+		r = fminf(255.0f, fmaxf(0.0f, r));
+		g = fminf(255.0f, fmaxf(0.0f, g));
+		b = fminf(255.0f, fmaxf(0.0f, b));
+
+		if (r > 127 || g > 127 || b > 127)
+		{
+			data[i] = 0;
+			data[i + 1] = 0;
+			data[i + 2] = 0;
+		}
+		else
+		{
+			data[i] = 255;
+			data[i + 1] = 255;
+			data[i + 2] = 255;
+		}
+	}
+
+	return 1;
+}
+
+// Função para converter uma imagem RGB para uma imagem HSV
+int vc_rgb_to_hsv(IVC* srcdst)
+{
+	unsigned char* data = (unsigned char*)srcdst->data;
 	int width = srcdst->width;
 	int height = srcdst->height;
 	int bytesperline = srcdst->bytesperline;
@@ -493,16 +551,18 @@ int vc_rgb_to_hsv(IVC *srcdst)
 	int i, size;
 
 	// Verificação de erros
-	if ((width <= 0) || (height <= 0) || (data == NULL)) return 0;
-	if (channels != 3) return 0;
+	if ((width <= 0) || (height <= 0) || (data == NULL))
+		return 0;
+	if (channels != 3)
+		return 0;
 
 	size = width * height * channels;
 
-	for (i = 0; i<size; i = i + channels)
+	for (i = 0; i < size; i = i + channels)
 	{
-		r = (float)data[i];
+		b = (float)data[i];
 		g = (float)data[i + 1];
-		b = (float)data[i + 2];
+		r = (float)data[i + 2];
 
 		// Calcula valores máximo e mínimo dos canais de cor R, G e B
 		rgb_max = (r > g ? (r > b ? r : b) : (g > b ? g : b));
@@ -547,39 +607,41 @@ int vc_rgb_to_hsv(IVC *srcdst)
 		}
 
 		// Atribui valores entre [0,255]
-		data[i] = (unsigned char) (hue / 360.0f * 255.0f);
-		data[i + 1] = (unsigned char) (saturation);
-		data[i + 2] = (unsigned char) (value);
-
+		data[i] = (unsigned char)(hue / 360.0f * 255.0f);
+		data[i + 1] = (unsigned char)(saturation);
+		data[i + 2] = (unsigned char)(value);
 	}
 
 	return 1;
 }
 
-// hmin,hmax = [0, 360]; smin,smax = [0, 100]; vmin,vmax = [0, 100]
-int vc_hsv_segmentation(IVC *srcdst, int hmin, int hmax, int smin, int smax, int vmin, int vmax)
+// Função que receba uma imagem HSV e retorne uma imagem com 1 canal (admitindo valores entre 0 e 255 por pixel)
+int vc_hsv_segmentation(IVC* src, int hmin, int hmax, int smin, int smax, int vmin, int vmax)
 {
-	unsigned char *data = (unsigned char *)srcdst->data;
-	int width = srcdst->width;
-	int height = srcdst->height;
-	int bytesperline = srcdst->bytesperline;
-	int channels = srcdst->channels;
-	int h, s, v; // h=[0, 360] s=[0, 100] v=[0, 100]
+
+	unsigned char* data = (unsigned char*)src->data;
+	int width = src->width;
+	int height = src->height;
+	int bytesperline = src->width * src->channels;
+	int channels = src->channels;
+	float h, s, v;
 	int i, size;
 
-	// Verificação de erros
-	if ((srcdst->width <= 0) || (srcdst->height <= 0) || (srcdst->data == NULL)) return 0;
-	if (channels != 3) return 0;
+	if ((src->width) <= 0 || (src->height <= 0) || (src->data == NULL))
+		return 0;
+	if (src->channels != 3)
+		return 0;
 
 	size = width * height * channels;
 
 	for (i = 0; i < size; i = i + channels)
 	{
-		h = (int) (((float)data[i]) / 255.0f * 360.0f);
-		s = (int) (((float)data[i + 1]) / 255.0f * 100.0f);
-		v = (int) (((float)data[i + 2]) / 255.0f * 100.0f);
 
-		if ((h > hmin) && (h <= hmax) && (s >= smin) && (s <= smax) && (v >= vmin) && (v <= vmax))
+		h = (float)data[i] * 360.0f / 255.0f;
+		s = (float)data[i + 1] * 100.0f / 255.0f;
+		v = (float)data[i + 2] * 100.0f / 255.0f;
+
+		if (h >= hmin && h <= hmax && s >= smin && s <= smax && v >= vmin && v <= vmax)
 		{
 			data[i] = 255;
 			data[i + 1] = 255;
@@ -592,11 +654,8 @@ int vc_hsv_segmentation(IVC *srcdst, int hmin, int hmax, int smin, int smax, int
 			data[i + 2] = 0;
 		}
 	}
-
-
 	return 1;
 }
-	
 	
 int vc_scale_gray_to_rgb(IVC *src, IVC *dst) {
     unsigned char *datasrc = (unsigned char *)src->data;
@@ -1644,28 +1703,36 @@ int vc_desenha_box(IVC* src, OVC* blobs, int nblobs)
 	{
 		// Desenha as bordas horizontais
 		for (xx = blobs[i].x; xx <= blobs[i].x + blobs[i].width; xx++) {
-			pos = blobs[i].y * bytesperline_src + xx * channels_src;
-			datasrc[pos] = 0;       // R
-			datasrc[pos + 1] = 255; // G
-			datasrc[pos + 2] = 0;   // B
+			if (xx >= 0 && xx < src->width && blobs[i].y >= 0 && blobs[i].y < src->height) {
+				pos = blobs[i].y * bytesperline_src + xx * channels_src;
+				datasrc[pos] = 0;       // R
+				datasrc[pos + 1] = 255; // G
+				datasrc[pos + 2] = 0;   // B
+			}
 
-			pos = (blobs[i].y + blobs[i].height) * bytesperline_src + xx * channels_src;
-			datasrc[pos] = 0;       // R
-			datasrc[pos + 1] = 255; // G
-			datasrc[pos + 2] = 0;   // B
+			if (xx >= 0 && xx < src->width && blobs[i].y + blobs[i].height >= 0 && blobs[i].y + blobs[i].height < src->height) {
+				pos = (blobs[i].y + blobs[i].height) * bytesperline_src + xx * channels_src;
+				datasrc[pos] = 0;       // R
+				datasrc[pos + 1] = 255; // G
+				datasrc[pos + 2] = 0;   // B
+			}
 		}
 
 		// Desenha as bordas verticais
 		for (yy = blobs[i].y; yy <= blobs[i].y + blobs[i].height; yy++) {
-			pos = yy * bytesperline_src + blobs[i].x * channels_src;
-			datasrc[pos] = 0;       // R
-			datasrc[pos + 1] = 255; // G
-			datasrc[pos + 2] = 0;   // B
+			if (yy >= 0 && yy < src->height && blobs[i].x >= 0 && blobs[i].x < src->width) {
+				pos = yy * bytesperline_src + blobs[i].x * channels_src;
+				datasrc[pos] = 0;       // R
+				datasrc[pos + 1] = 255; // G
+				datasrc[pos + 2] = 0;   // B
+			}
 
-			pos = yy * bytesperline_src + (blobs[i].x + blobs[i].width) * channels_src;
-			datasrc[pos] = 0;       // R
-			datasrc[pos + 1] = 255; // G
-			datasrc[pos + 2] = 0;   // B
+			if (yy >= 0 && yy < src->height && blobs[i].x + blobs[i].width >= 0 && blobs[i].x + blobs[i].width < src->width) {
+				pos = yy * bytesperline_src + (blobs[i].x + blobs[i].width) * channels_src;
+				datasrc[pos] = 0;       // R
+				datasrc[pos + 1] = 255; // G
+				datasrc[pos + 2] = 0;   // B
+			}
 		}
 	}
 	return 1;
@@ -1673,5 +1740,52 @@ int vc_desenha_box(IVC* src, OVC* blobs, int nblobs)
 
 
 
+int vc_3_channels_to_binary(IVC* src, IVC* dst)
+{
+	unsigned char* data_src = (unsigned char*)src->data;
+	unsigned char* data_dst = (unsigned char*)dst->data;
+	int width = src->width;
+	int height = src->height;
+	int bytesperline = src->width * src->channels;
+	int channels = src->channels;
+	int x, y;
+	long int pos;
 
+	if ((src->width) <= 0 || (src->height <= 0) || (src->data == NULL))
+	{
+		printf("(vc_3chanels_to_1) Tamanhos inválidos\n");
+		return 0;
+	}
+	if (src->channels != 3)
+	{
+		printf("(vc_3chanels_to_1) Imagem tem de ter 3 canais\n");
+		return 0;
+	}
+	if ((dst->width) <= 0 || (dst->height <= 0) || (dst->data == NULL))
+	{
+		printf("(vc_3chanels_to_1) Tamanhos inválidos\n");
+		return 0;
+	}
+	if (dst->channels != 1)
+	{
+		printf("(vc_3chanels_to_1) Imagem tem de ter 1 canal\n");
+		return 0;
+	}
+	if (src->width != dst->width || src->height != dst->height)
+	{
+		printf("(vc_3chanels_to_1) Imagens têm tamanhos diferentes\n");
+		return 0;
+	}
+
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			pos = y * bytesperline + x * channels;
+			data_dst[y * width + x] = data_src[pos];
+		}
+	}
+
+	return 1;
+}
 

@@ -58,6 +58,7 @@ int vc_gray_negative(IVC *srcdst);
 int vc_rgb_negative(IVC *srcdst);
 int vc_rgb_to_gray(IVC *src, IVC *dst);
 int vc_rgb_to_hsv(IVC *srcdst);
+int vc_rgb_to_binary(IVC* srcdst);
 int vc_hsv_segmentation(IVC *srcdst, int hmin, int hmax, int smin, int smax, int vmin, int vmax);
 int vc_scale_gray_to_rgb(IVC *src, IVC *dst);
 int vc_gray_to_rgb(IVC *src, IVC *dst);
@@ -84,3 +85,4 @@ int vc_binary_open(IVC* src, IVC* dst, int kernel);
 
 
 int vc_desenha_box(IVC* src, OVC* blobs, int nblobs);
+int vc_3_channels_to_binary(IVC* src, IVC* dst);
