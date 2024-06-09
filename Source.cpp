@@ -131,12 +131,16 @@ void process_combined_mask(cv::Mat& combined_mask, cv::Scalar color, cv::Mat& fr
             for (int i = -cross_size; i <= cross_size; i++) {
                 if (yc + i >= 0 && yc + i < frame.rows) {
                     for (int c = 0; c < frame.channels(); c++) {
-                        frame.at<cv::Vec3b>(yc + i, xc)[c] = 0; // Preto
+                        if (xc >= 0 && xc < frame.cols) {
+                            frame.at<cv::Vec3b>(yc + i, xc)[c] = 0; // Preto
+                        }
                     }
                 }
                 if (xc + i >= 0 && xc + i < frame.cols) {
                     for (int c = 0; c < frame.channels(); c++) {
-                        frame.at<cv::Vec3b>(yc, xc + i)[c] = 0; // Preto
+                        if (yc >= 0 && yc < frame.rows) {
+                            frame.at<cv::Vec3b>(yc, xc + i)[c] = 0; // Preto
+                        }
                     }
                 }
             }
@@ -175,7 +179,7 @@ int main(void) {
     int resistores = 0;
 
     capture.open(videofile);
-
+        
     if (!capture.isOpened()) {
         std::cerr << "Erro ao abrir o ficheiro de vídeo!\n";
         return 1;
