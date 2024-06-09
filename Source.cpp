@@ -1,434 +1,296 @@
-#include <iostream>
+ï»¿#include <iostream>
 #include <string>
-#include <chrono>
-#include <opencv2\opencv.hpp>
-#include <opencv2\core.hpp>
-#include <opencv2\highgui.hpp>
-#include <opencv2\videoio.hpp>
-#include "opencv2/imgcodecs.hpp"
-#include "opencv2/imgproc.hpp"
-#include <fstream>
-#include <vector>
-#include <filesystem>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/videoio.hpp>
+#include <math.h>
 
-extern "C"
-{
+#define PI 3.14285714286
+
+extern "C" {
 #include "vc.h"
 }
 
-void vc_timer(void)
-{
-	static bool running = false;
-	static std::chrono::steady_clock::time_point previousTime = std::chrono::steady_clock::now();
+void process_combined_mask(cv::Mat& combined_mask, cv::Scalar color, cv::Mat& frame, const std::string& label, bool combine_blobs = false) {
+    IVC* src_image = vc_image_new(combined_mask.cols, combined_mask.rows, 1, 255);
+    memcpy(src_image->data, combined_mask.data, combined_mask.total());
+    IVC* dst_image = vc_image_new(combined_mask.cols, combined_mask.rows, 1, 255);
+    memset(dst_image->data, 0, combined_mask.total());
 
-	if (!running)
-	{
-		running = true;
-	}
-	else
-	{
-		std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
-		std::chrono::steady_clock::duration elapsedTime = currentTime - previousTime;
+    vc_binary_dilate(src_image, dst_image, 9);
+    cv::Mat dilatedMask(combined_mask.rows, combined_mask.cols, CV_8UC1, dst_image->data);
 
-		// Tempo em segundos.
-		std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(elapsedTime);
-		double nseconds = time_span.count();
+    IVC* image_blob = vc_image_new(dilatedMask.cols, dilatedMask.rows, 1, 255);
+    memcpy(image_blob->data, dilatedMask.data, dilatedMask.total());
 
-		std::cout << "Tempo decorrido: " << nseconds << "segundos" << std::endl;
-		std::cout << "Pressione qualquer tecla para continuar...\n";
-		std::cin.get();
-	}
+    // Detectar blobs na imagem binÃ¡ria
+    OVC* blobs;
+    int nblobs;
+    blobs = vc_binary_blob_labelling(image_blob, image_blob, &nblobs);
+    vc_get_blob_properties(image_blob, blobs, nblobs);
+
+    if (combine_blobs && nblobs > 0) {
+        // Combinar blobs
+        int xmin = blobs[0].x, ymin = blobs[0].y;
+        int xmax = blobs[0].x + blobs[0].width - 1, ymax = blobs[0].y + blobs[0].height - 1;
+        for (int i = 1; i < nblobs; i++) {
+            xmin = std::min(xmin, blobs[i].x);
+            ymin = std::min(ymin, blobs[i].y);
+            xmax = std::max(xmax, blobs[i].x + blobs[i].width - 1);
+            ymax = std::max(ymax, blobs[i].y + blobs[i].height - 1);
+        }
+
+        // Desenhar as bordas da caixa na imagem colorida
+        for (int x = xmin; x <= xmax; x++) {
+            for (int c = 0; c < frame.channels(); c++) {
+                frame.at<cv::Vec3b>(ymin, x)[c] = color[c];
+                frame.at<cv::Vec3b>(ymax, x)[c] = color[c];
+            }
+        }
+        for (int y = ymin; y <= ymax; y++) {
+            for (int c = 0; c < frame.channels(); c++) {
+                frame.at<cv::Vec3b>(y, xmin)[c] = color[c];
+                frame.at<cv::Vec3b>(y, xmax)[c] = color[c];
+            }
+        }
+
+        // Adicionar o texto da label acima da bounding box
+        int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+        double fontScale = 0.5;
+        int thickness = 1;
+        int baseline = 0;
+        cv::Size textSize = cv::getTextSize(label, fontFace, fontScale, thickness, &baseline);
+        int textX = xmin;
+        int textY = ymin - 5;
+
+        // Verificar se o texto vai sair fora da imagem e ajustar
+        if (textY - textSize.height < 0) {
+            textY = ymin + textSize.height + 5;
+        }
+
+        cv::putText(frame, label, cv::Point(textX, textY), fontFace, fontScale, color, thickness);
+
+        // Desenhar o centro de massa como uma cruz na imagem colorida
+        int xc = (xmin + xmax) / 2;
+        int yc = (ymin + ymax) / 2;
+        int cross_size = 5;
+        for (int i = -cross_size; i <= cross_size; i++) {
+            if (yc + i >= 0 && yc + i < frame.rows) {
+                for (int c = 0; c < frame.channels(); c++) {
+                    frame.at<cv::Vec3b>(yc + i, xc)[c] = 0; // Preto
+                }
+            }
+            if (xc + i >= 0 && xc + i < frame.cols) {
+                for (int c = 0; c < frame.channels(); c++) {
+                    frame.at<cv::Vec3b>(yc, xc + i)[c] = 0; // Preto
+                }
+            }
+        }
+    }
+    else {
+        // Desenhar caixas ao redor dos blobs detectados na imagem binÃ¡ria e colorida
+        for (int i = 0; i < nblobs; i++) {
+            // TambÃ©m desenhar na imagem colorida
+            int x1 = blobs[i].x, y1 = blobs[i].y;
+            int x2 = blobs[i].x + blobs[i].width - 1, y2 = blobs[i].y + blobs[i].height - 1;
+            int xc = blobs[i].xc, yc = blobs[i].yc;
+            int cross_size = 5;
+
+            // Desenhar as bordas da caixa na imagem colorida
+            for (int x = x1; x <= x2; x++) {
+                for (int c = 0; c < frame.channels(); c++) {
+                    frame.at<cv::Vec3b>(y1, x)[c] = color[c];
+                    frame.at<cv::Vec3b>(y2, x)[c] = color[c];
+                }
+            }
+            for (int y = y1; y <= y2; y++) {
+                for (int c = 0; c < frame.channels(); c++) {
+                    frame.at<cv::Vec3b>(y, x1)[c] = color[c];
+                    frame.at<cv::Vec3b>(y, x2)[c] = color[c];
+                }
+            }
+
+            // Adicionar o texto da label acima da bounding box
+            int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+            double fontScale = 0.5;
+            int thickness = 1;
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(label, fontFace, fontScale, thickness, &baseline);
+            int textX = x1;
+            int textY = y1 - 5;
+
+            // Verificar se o texto vai sair fora da imagem e ajustar
+            if (textY - textSize.height < 0) {
+                textY = y1 + textSize.height + 5;
+            }
+
+            cv::putText(frame, label, cv::Point(textX, textY), fontFace, fontScale, color, thickness);
+
+            // Desenhar o centro de massa como uma cruz na imagem colorida
+            for (int i = -cross_size; i <= cross_size; i++) {
+                if (yc + i >= 0 && yc + i < frame.rows) {
+                    for (int c = 0; c < frame.channels(); c++) {
+                        frame.at<cv::Vec3b>(yc + i, xc)[c] = 0; // Preto
+                    }
+                }
+                if (xc + i >= 0 && xc + i < frame.cols) {
+                    for (int c = 0; c < frame.channels(); c++) {
+                        frame.at<cv::Vec3b>(yc, xc + i)[c] = 0; // Preto
+                    }
+                }
+            }
+        }
+    }
+
+    // Limpar memÃ³ria
+    vc_image_free(src_image);
+    vc_image_free(dst_image);
+    vc_image_free(image_blob);
 }
 
-// // Tabela de mapeamento de cores HSV para valores de resistores
-// std::map<std::string, cv::Scalar> colorMap = {
-//     {"Preto", cv::Scalar(0, 0, 0)},
-//     {"Castanho", cv::Scalar(20, 255, 150)},
-//     {"Vermelho", cv::Scalar(0, 255, 255)},
-//     {"Laranja", cv::Scalar(10, 255, 255)},
-//     {"Amarelo", cv::Scalar(30, 255, 255)},
-//     {"Verde", cv::Scalar(60, 255, 255)},
-//     {"Azul", cv::Scalar(120, 255, 255)},
-//     {"Violeta", cv::Scalar(150, 255, 255)},
-//     {"Cinza", cv::Scalar(0, 0, 100)},
-//     {"Branco", cv::Scalar(0, 0, 255)}
-// };
-
-#pragma region Cores
-std::map<std::string, int> colorValueMap = {
-	{"Preto", 0},
-	{"Castanho", 1},
-	{"Vermelho", 2},
-	{"Laranja", 3},
-	{"Amarelo", 4},
-	{"Verde", 5},
-	{"Azul", 6},
-	{"Violeta", 7},
-	{"Cinzento", 8},
-	{"Branco", 9}
-};
-
-std::map<std::string, int> multiplierMap = {
-	{"Preto", 1},
-	{"Castanho", 10},
-	{"Vermelho", 100},
-	{"Laranja", 1000},
-	{"Amarelo", 10000},
-	{"Verde", 100000},
-	{"Azul", 1000000},
-	{"Violeta", 10000000},
-	{"Cinzento", 100000000},
-	{"Branco", 1000000000}
-};
-
-std::map<std::string, int> colorHueMap = {
-	{"Preto", 0},
-	{"Castanho", 20},
-	{"Vermelho", 0},
-	{"Laranja", 30},
-	{"Amarelo", 60},
-	{"Verde", 120},
-	{"Azul", 240},
-	{"Violeta", 270},
-	{"Cinzento", 0},
-	{"Branco", 0}
-};
-
-std::string identifyColor(int hue) {
-	for (const auto& color : colorHueMap) {
-		if (abs(hue - color.second) < 10) {
-			return color.first;
-		}
-	}
-	return "Desconhecido";
+bool is_non_zero(cv::Mat& mask) {
+    for (int y = 0; y < mask.rows; ++y) {
+        for (int x = 0; x < mask.cols; ++x) {
+            if (mask.at<uchar>(y, x) > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
-#pragma endregion
-
-int main(void)
-{
-	char videofile[120] = "video.mp4"; //video atualizado
-	cv::VideoCapture capture;
-	struct
-	{
-		int width, height;
-		int ntotalframes;
-		int fps;
-		int nframe;
-	} video;
-
-	std::string str;
-	int key = 0;
-
-	/* Leitura de vídeo de um ficheiro */
-	/* NOTA IMPORTANTE:
-	O ficheiro video.mp4 deverá estar localizado no mesmo directório que o ficheiro de código fonte.
-	*/
-	capture.open(videofile);
 
-	/* Em alternativa, abrir captura de vídeo pela Webcam #0 */
-	// capture.open(0, cv::CAP_DSHOW); // Pode-se utilizar apenas capture.open(0);
-
-	int countRes = 0;
-
-#pragma region OpenCV Obtencao de propriedades do video e iniciacao da exibicao da imagem
-
-	/* Verifica se foi possível abrir o ficheiro de vídeo */
-	if (!capture.isOpened())
-	{
-		std::cerr << "Erro ao abrir o ficheiro de vídeo!\n";
-		return 1;
-	}
-
-	/* Número total de frames no vídeo */
-	video.ntotalframes = (int)capture.get(cv::CAP_PROP_FRAME_COUNT);
-	/* Frame rate do vídeo */
-	video.fps = (int)capture.get(cv::CAP_PROP_FPS);
-	/* Resolução do vídeo */
-	video.width = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
-	video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
-
-	/* Cria uma janela para exibir o vídeo */
-	cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
-
-	/* Inicia o timer */
-	vc_timer();
-
-	cv::Mat frame;
-
-	while (key != 'q')
-	{
-		/* Leitura de uma frame do vídeo */
-		capture.read(frame);
-
-		/* Verifica se conseguiu ler a frame */
-		if (frame.empty())
-			break;
-
-		/* Número da frame a processar */
-		video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
-
-		// Criação de imagens
-		IVC* image = vc_image_new(video.width, video.height, 3, 255);
-		IVC* imageOriginal = vc_image_new(video.width, video.height, 3, 255);
-		IVC* imageHSV = vc_image_new(video.width, video.height, 3, 255);
-		IVC* image2 = vc_image_new(video.width, video.height, 1, 255);
-		IVC* dilatedImage = vc_image_new(video.width, video.height, 1, 255);
-		IVC* taggedImage = vc_image_new(video.width, video.height, 1, 255);
-		IVC* image6 = vc_image_new(video.width, video.height, 3, 255);
-
-		
-
-		// Copia dados de imagem da estrutura cv::Mat para uma estrutura IVC
-		memcpy(image->data, frame.data, video.width * video.height * 3);
-		memcpy(image6->data, frame.data, video.width * video.height * 3);
-
-		// Conversão de RGB para HSV
-		vc_rgb_to_hsv(image, imageHSV);
-
-		// Copia imagem HSV para outra imagem
-		memcpy(imageHSV->data, image->data, video.width * video.height * 3);
-
-		// Segmentação da imagem HSV
-		//vc_hsv_segmentation(imageHSV, imageSegAzu, imageSegVerm, 0, 40, 50, 100, 0, 100, 216, 262, 62, 100, 0, 100);
-
-
-		// Tranforma imagem HSV em imagem binária
-		vc_hsv_to_binary(image, image2);
-
-		vc_gray_histogram_show(image2, dilatedImage);
-
-		// Aplica a dilatação na imagem binária mas o vídeo fica extremamente muito lento
-		/*vc_gray_dilate(image2, dilatedImage, 15);
-		* // Dilata a imagem binária
-		vc_binary_dilate(image2, dilatedImage, 30);*/
-
-		
-		// Converte IVC para cv::Mat
-		cv::Mat matImagemBinaria(video.height, video.width, CV_8UC1, image2->data);
-		cv::Mat matDilatada;
-
-		// Cria kernel
-		int kernelSize = 47;
-		//int kernelSize2 = 3;
-		cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(kernelSize, kernelSize));
-		//cv::Mat kernelErosion = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(kernelSize2, kernelSize2));
-
-		// Aplica a função cv::erode
-		//cv::erode(matImagemBinaria, matErodida, kernelErosion);
-
-		// Aplica a função cv::dilate
-		//cv::dilate(matErodida, matDilatada, kernel);
-		cv::dilate(matImagemBinaria, matDilatada, kernel);
-
-		// Converte de volta para IVC
-		memcpy(dilatedImage->data, matDilatada.data, video.width * video.height);
-
-
-		// // Encontra os contornos na imagem binarizada
-		// std::vector<std::vector<cv::Point>> contours;
-		// cv::findContours(gray_frame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-
-		// // Desenha os contornos (caixas delimitadoras) na imagem original
-		// for (size_t i = 0; i < contours.size(); i++) {
-		// 	cv::Rect boundingBox = cv::boundingRect(contours[i]);
-		// 	cv::rectangle(frame, boundingBox, cv::Scalar(0, 255, 0), 2);
-		// }
-
-		// Etiquetagem dos blobs
-		int nlabels;
-		OVC* blobs = vc_binary_blob_labelling(dilatedImage, taggedImage, &nlabels);
-
-		// Extração de informação dos blobs
-		vc_get_blob_properties(taggedImage, blobs, nlabels);
-
-		// Converte IVC para cv::Mat
-		cv::Mat hsvImage(image->height, image->width, CV_8UC3, imageHSV->data);
-
-
-		if (blobs != nullptr)
-		{
-			// Definir as regiões das faixas de acordo com a posição das resistências contidas nas bounding boxes
-			cv::Rect band1(blobs->xc, blobs->yc, 5, blobs->height);
-			cv::Rect band2(blobs->xc + 5, blobs->yc, 5, blobs->height);
-			cv::Rect band3(blobs->xc + 5, blobs->yc, 5, blobs->height);
-			cv::Rect band4(blobs->xc + 5, blobs->yc, 5, blobs->height);
-			//cv::Rect band5(blobs->x + 60, blobs->y, 15, 5);
-
-			//cv::Rect band1(30, 50, 10, 100);
-
-
-			int altura = video.width / 2;
-			const float tolerance = 3;
-
-			// Verifica se o blob é uma resistência
-			if (blobs->area > 15000 && blobs->area < 28000 && blobs->perimeter > 500 && blobs->perimeter < 700 && blobs->height < 130 && blobs->height > 85)
-			{
-				// Desenha as bounding boxes
-				vc_draw_boundingbox(imageHSV, blobs);
-				vc_draw_centerofgravity(imageHSV, blobs);
-
-				// Quando o centro de massa passar pelo centro da tela, contar um blob como resistência
-				if (abs(blobs->yc - altura) <= tolerance)
-				{
-					std::cout << "Resistencia detectada" << std::endl;
-					countRes++;
-
-					// Identificar todas as cores na linha do centro de massa dentro do blob
-					cv::Mat linha = hsvImage.row(blobs->yc);
-
-					// Delimitar a área do blob na linha
-					int startX = std::max(0, blobs->xc - blobs->width / 2);
-					int endX = std::min(linha.cols - 1, blobs->xc + blobs->width / 2);
-					cv::Mat linhaBlob = linha(cv::Range::all(), cv::Range(startX, endX));
-
-					std::vector<cv::Mat> hsvChannels;
-					cv::split(linhaBlob, hsvChannels);
-
-					int segmentSize = linhaBlob.cols / 4; // Tamanho do segmento
-					std::vector<std::string> coresResistor;
-
-					for (int i = 0; i < linhaBlob.cols; i += segmentSize)
-					{
-						cv::Rect roi(i, 0, std::min(segmentSize, linhaBlob.cols - i), 1);
-						cv::Mat segment = linhaBlob(roi);
-
-						std::vector<cv::Mat> segmentChannels;
-						cv::split(segment, segmentChannels);
-
-						int histSize = 180;
-						float range[] = { 0, 180 };
-						const float* histRange = { range };
-						cv::Mat hist;
-						cv::calcHist(&segmentChannels[0], 1, 0, cv::Mat(), hist, 1, &histSize, &histRange);
-
-						// Encontrar o bin com o maior valor no histograma
-						cv::Point maxLoc;
-						cv::minMaxLoc(hist, 0, 0, 0, &maxLoc);
-
-						// Retornar a cor dominante baseada no valor de Hue
-						std::string corDominante = identifyColor(maxLoc.y);
-						coresResistor.push_back(corDominante);
-						// for (const auto& color : colorValueMap) {
-						// 	if (abs(maxLoc.y - color.second) < 10) {
-						// 		coresResistor.push_back(color.first);
-						// 		break;
-						// 	}
-						// }
-					}
-
-					// Exibir as cores na ordem
-					for (const auto& cor : coresResistor) {
-						std::cout << "Cor: " << cor << std::endl;
-					}
-
-					// Verificar se 4 cores foram detectadas
-					if (coresResistor.size() == 4) {
-						// Calcular o valor da resistência
-						int digit1 = colorValueMap[coresResistor[0]];
-						int digit2 = colorValueMap[coresResistor[1]];
-						int digit3 = colorValueMap[coresResistor[2]];
-						int multiplier = multiplierMap[coresResistor[3]];
-
-						int resistencia = (digit1 * 10 + digit2) * multiplier;
-						std::cout << "Valor da resistência: " << resistencia << " ohms" << std::endl;
-					}
-					else {
-						std::cout << "Erro: Não foram detectadas 4 cores." << std::endl;
-					}
-
-					// // Identificar a cor dominante de cada faixa
-					// std::string color1 = identifyDominantColor(hsvImage(band1));
-					// std::cout << "Faixa 1: " << color1 << std::endl;
-					// std::string color2 = identifyDominantColor(hsvImage(band2));
-					// std::cout << "Faixa 2: " << color2 << std::endl;
-					// std::string color3 = identifyDominantColor(hsvImage(band3));
-					// std::cout << "Faixa 3: " << color3 << std::endl;
-					// std::string color4 = identifyDominantColor(hsvImage(band4));
-					// std::cout << "Faixa 4: " << color4 << std::endl;
-				}
-
-
-			}
-		}
-
-		// Extrair as cores das resistencias para calcular o seu valor em ohm
-
-		//Tabela de resistências
-		//Cores: Preto, Castanho, Vermelho, Laranja, Amarelo, Verde, Azul, Violeta, Cinzento, Branco
-		//Valores: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
-		//Tolerância: Ouro, Prata
-		//Multiplicador: Preto, Castanho, Vermelho, Laranja, Amarelo, Verde, Azul, Violeta, Cinzento, Branco
-		//Valores: 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000
-
-
-
-			//Escrever a area e o perimetro de cada blob
-			// for (int i = 0; i < nlabels; i++)
-			// {
-			// 	std::cout << "Frame " << video.nframe << "\n";
-			// 	std::cout << "Blob " << i << " Area: " << blobs[i].area << " Perimetro: " << blobs[i].perimeter << std::endl;
-			// 	std::cout << "Blob " << i << " X: " << blobs[i].x << " Y: " << blobs[i].y << std::endl;
-			// 	std::cout << "Blob " << i << " Width: " << blobs[i].width << " Height: " << blobs[i].height << std::endl;
-			// 	std::cout << "Blob " << i << " Xc: " << blobs[i].xc << " Yc: " << blobs[i].yc << std::endl;
-			// 	std::cout << "Blob " << i << " Label: " << blobs[i].label << std::endl;
-			// }
-
-
-		//  Copia dados de imagem da estrutura IVC para uma estrutura cv::Mat
-		//cv::Mat binary_frame(video.height, video.width, CV_8UC1);
-		//memcpy(binary_frame.data, imagemDilatada->data, video.width * video.height);
-		memcpy(frame.data, image6->data, video.width * video.height * 3);
-
-		// Liberta memória alocada para as imagens IVC criadas anteriormente
-		vc_image_free(image);
-		vc_image_free(image2);
-		vc_image_free(dilatedImage);
-		vc_image_free(taggedImage);
-		vc_image_free(imageHSV);
-		vc_image_free(image6);
-
-#pragma region OpenCV (Exibicao de informacoes na tela e finalizacao do programa)
-		
-		/* Inserção de texto na frame */
-		str = std::string("RESOLUCAO: ").append(std::to_string(video.width)).append("x").append(std::to_string(video.height));
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-		str = std::string("TOTAL DE FRAMES: ").append(std::to_string(video.ntotalframes));
-		cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-		str = std::string("FRAME RATE: ").append(std::to_string(video.fps));
-		cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-		str = std::string("N. DA FRAME: ").append(std::to_string(video.nframe));
-		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-		cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-
-		/* Exibe a frame */
-		cv::imshow("VC - VIDEO", frame);
-
-		/* Sai da aplicação, se o utilizador premir a tecla 'q' */
-		key = cv::waitKey(1);
-
-		// Interrompe a execução após o frame 780
-		if (video.nframe == 780)
-		{
-			break;
-		}
-
-		
-	}
-
-	std::cout << "Numero de resistencias: " << countRes << std::endl;
-	/* Para o timer e exibe o tempo decorrido */
-	vc_timer();
-
-	/* Fecha a janela */
-	cv::destroyWindow("VC - VIDEO");
-
-	/* Fecha o ficheiro de vídeo */
-	capture.release();
-
-#pragma endregion
-	
-	return 0;
+int main(void) {
+    char videofile[20] = "video.mp4";
+    cv::VideoCapture capture;
+    struct {
+        int width, height;
+        int ntotalframes;
+        int fps;
+        int nframe;
+    } video;
+
+    std::string str;
+    int key = 0;
+    int resistores = 0;
+
+    capture.open(videofile);
+
+    if (!capture.isOpened()) {
+        std::cerr << "Erro ao abrir o ficheiro de vÃ­deo!\n";
+        return 1;
+    }
+
+    video.ntotalframes = (int)capture.get(cv::CAP_PROP_FRAME_COUNT);
+    video.fps = (int)capture.get(cv::CAP_PROP_FPS);
+    video.width = (int)capture.get(cv::CAP_PROP_FRAME_WIDTH);
+    video.height = (int)capture.get(cv::CAP_PROP_FRAME_HEIGHT);
+
+    cv::namedWindow("VC - VIDEO", cv::WINDOW_AUTOSIZE);
+
+    cv::Mat frame;
+    while (key != 'q') {
+        capture.read(frame);
+        if (frame.empty()) break;
+
+        video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
+
+        str = std::string("RESOLUCAO: ").append(std::to_string(video.width)).append("x").append(std::to_string(video.height));
+        cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+        cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+        str = std::string("TOTAL DE FRAMES: ").append(std::to_string(video.ntotalframes));
+        cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+        cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+        str = std::string("FRAME RATE: ").append(std::to_string(video.fps));
+        cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+        cv::putText(frame, str, cv::Point(20, 75), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+        str = std::string("N. DA FRAME: ").append(std::to_string(video.nframe));
+        cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+        cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+        str = std::string("N. DE RESISTORES: ").append(std::to_string(resistores));
+        cv::putText(frame, str, cv::Point(20, 125), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+        cv::putText(frame, str, cv::Point(20, 125), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
+
+        IVC* image = vc_image_new(video.width, video.height, 3, 255);
+        IVC* image_dst = vc_image_new(image->width, image->height, 3, 255);
+        IVC* image_dst1 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst2 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst3 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst4 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst5 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst6 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst7 = vc_image_new(image->width, image->height, 1, 255);
+        IVC* image_dst8 = vc_image_new(image->width, image->height, 1, 255);
+
+        memcpy(image->data, frame.data, video.width * video.height * 3);
+        vc_bgr_to_rgb(image);
+        vc_rgb_to_hsv(image, image_dst);
+
+        vc_hsv_segmentation(image_dst, image_dst1, 0, 10, 50, 255, 50, 255); //Red
+        vc_hsv_segmentation(image_dst, image_dst2, 170, 180, 70, 255, 50, 255); //Red
+        vc_hsv_segmentation(image_dst, image_dst3, 70, 120, 40, 255, 30, 255); //Green
+        vc_hsv_segmentation(image_dst, image_dst4, 120, 150, 200, 255, 230, 255); //Green
+        vc_hsv_segmentation(image_dst, image_dst5, 180, 210, 20, 255, 20, 255); //Blue
+        vc_hsv_segmentation(image_dst, image_dst6, 210, 270, 20, 255, 20, 255); //Blue
+        vc_hsv_segmentation(image_dst, image_dst7, 30, 50, 40, 255, 50, 255); //Yellow
+        vc_hsv_segmentation(image_dst, image_dst8, 10, 30, 200, 255, 150, 255); //Brown NÃƒO FUNCIONAL
+
+        cv::Mat maskRed1(image_dst1->height, image_dst1->width, CV_8UC1, image_dst1->data);
+        cv::Mat maskRed2(image_dst2->height, image_dst2->width, CV_8UC1, image_dst2->data);
+        cv::Mat maskRed = maskRed1 | maskRed2;
+
+        cv::Mat maskGreen1(image_dst3->height, image_dst3->width, CV_8UC1, image_dst3->data);
+        cv::Mat maskGreen2(image_dst4->height, image_dst4->width, CV_8UC1, image_dst4->data);
+        cv::Mat maskGreenTotal = maskGreen1 | maskGreen2;
+
+        cv::Mat maskBlue1(image_dst5->height, image_dst5->width, CV_8UC1, image_dst5->data);
+        cv::Mat maskBlue2(image_dst6->height, image_dst6->width, CV_8UC1, image_dst6->data);
+        cv::Mat maskBlue = maskBlue1 | maskBlue2;
+
+        cv::Mat maskYellow(image_dst7->height, image_dst7->width, CV_8UC1, image_dst7->data);
+
+        cv::Mat maskBrown(image_dst8->height, image_dst8->width, CV_8UC1, image_dst8->data);
+
+        // Combine all masks into a single mask
+        cv::Mat combinedMask = maskRed | maskGreenTotal | maskBlue | maskYellow | maskBrown;
+
+        // Process the combined mask to detect and draw boxes around resistors with labels
+        if (is_non_zero(maskRed)) {
+            process_combined_mask(maskRed, cv::Scalar(0, 0, 255), frame, "Red");
+        }
+        if (is_non_zero(maskGreenTotal)) {
+            process_combined_mask(maskGreenTotal, cv::Scalar(0, 255, 0), frame, "Green");
+        }
+        if (is_non_zero(maskBlue)) {
+            process_combined_mask(maskBlue, cv::Scalar(255, 0, 0), frame, "Blue");
+        }
+        if (is_non_zero(maskYellow)) {
+            process_combined_mask(maskYellow, cv::Scalar(0, 0, 0), frame, "Resistor", true); // Combinar blobs amarelos
+        }
+        if (is_non_zero(maskBrown)) {
+            process_combined_mask(maskBrown, cv::Scalar(42, 42, 165), frame, "Brown");
+        }
+
+        cv::imshow("VC - VIDEO", frame);
+        cv::imshow("VC - VIDEO - MASK", combinedMask);
+
+        key = cv::waitKey(10);
+
+        vc_image_free(image);
+        vc_image_free(image_dst);
+        vc_image_free(image_dst1);
+        vc_image_free(image_dst2);
+        vc_image_free(image_dst3);
+        vc_image_free(image_dst4);
+        vc_image_free(image_dst5);
+        vc_image_free(image_dst6);
+        vc_image_free(image_dst7);
+        vc_image_free(image_dst8);
+    }
+
+    cv::destroyWindow("VC - VIDEO");
+    cv::destroyWindow("VC - VIDEO - MASK");
+    capture.release();
+
+    return 0;
 }

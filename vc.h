@@ -69,6 +69,9 @@ int vc_rgb_get_blue_gray(IVC* srcdst);
 // RGB to Gray
 int vc_rgb_to_gray(IVC* src, IVC* dst);
 
+// BGR to RGB
+int vc_bgr_to_rgb(IVC* srcdst);
+
 // RGB to HSV
 int vc_rgb_to_hsv(IVC* src, IVC* dst);
 
@@ -82,7 +85,8 @@ int vc_grayscale_to_hsv(IVC* src, IVC* dst);
 int vc_scale_gray_to_red(IVC* src, IVC* dst);
 
 //Segmentação
-int vc_hsv_segmentation(IVC* src, IVC* dst1, IVC* dst2, int hmin1, int hmax1, int smin1, int smax1, int vmin1, int vmax1, int hmin2, int hmax2, int smin2, int smax2, int vmin2, int vmax2);
+int vc_hsv_segmentation(IVC* src, IVC* dst, int hmin, int hmax, int smin, int smax, int vmin, int vmax);
+//int vc_hsv_segmentation(IVC* src, IVC* dst1, IVC* dst2, int hmin1, int hmax1, int smin1, int smax1, int vmin1, int vmax1, int hmin2, int hmax2, int smin2, int smax2, int vmin2, int vmax2);
 
 int vc_scale_gray_to_rgb(IVC* src, IVC* dst);
 
@@ -132,7 +136,7 @@ int vc_draw_boundingbox(IVC* srcdst, OVC* blob);
 int vc_draw_centerofgravity(IVC* srcdst, OVC* blob);
 
 ////Contagem de número de píxeis a branco
-//int vc_count_pixels(IVC* src);
+int vc_count_pixels(IVC* src);
 
 // Desenha a caixa delimitadora de um objeto
 int vc_draw_boundingbox(IVC* src, OVC* blob);
