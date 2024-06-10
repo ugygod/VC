@@ -199,9 +199,6 @@ int main(void) {
 
         video.nframe = (int)capture.get(cv::CAP_PROP_POS_FRAMES);
 
-        str = std::string("RESOLUCAO: ").append(std::to_string(video.width)).append("x").append(std::to_string(video.height));
-        cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-        cv::putText(frame, str, cv::Point(20, 25), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
         str = std::string("TOTAL DE FRAMES: ").append(std::to_string(video.ntotalframes));
         cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
         cv::putText(frame, str, cv::Point(20, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
@@ -211,9 +208,6 @@ int main(void) {
         str = std::string("N. DA FRAME: ").append(std::to_string(video.nframe));
         cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
         cv::putText(frame, str, cv::Point(20, 100), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
-        str = std::string("N. DE RESISTORES: ").append(std::to_string(resistores));
-        cv::putText(frame, str, cv::Point(20, 125), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
-        cv::putText(frame, str, cv::Point(20, 125), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 1);
 
         IVC* image = vc_image_new(video.width, video.height, 3, 255);
         IVC* image_dst = vc_image_new(image->width, image->height, 3, 255);
@@ -270,6 +264,7 @@ int main(void) {
         }
         if (is_non_zero(maskYellow)) {
             process_combined_mask(maskYellow, cv::Scalar(0, 0, 0), frame, "Resistor", true); // Combinar blobs amarelos
+        	resistores++;
         }
         if (is_non_zero(maskBrown)) {
             process_combined_mask(maskBrown, cv::Scalar(42, 42, 165), frame, "Brown");
@@ -291,7 +286,7 @@ int main(void) {
         vc_image_free(image_dst7);
         vc_image_free(image_dst8);
     }
-
+    std::cout << "Numero de resistencias: " << resistores << std::endl;
     cv::destroyWindow("VC - VIDEO");
     cv::destroyWindow("VC - VIDEO - MASK");
     capture.release();
