@@ -33,12 +33,35 @@ typedef struct {
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 typedef struct {
-    int x, y, width, height;    // Caixa Delimitadora (Bounding Box)
-    int area;                    // Área
-    int xc, yc;                    // Centro-de-massa
-    int perimeter;                // Perímetro
-    int label;                    // Etiqueta
+	int x, y, width, height;	// Caixa Delimitadora (Bounding Box)
+	int area;					// �rea
+	int xc, yc;					// Centro-de-massa
+	int perimeter;				// Per�metro
+	int label;					// Etiqueta
+	int valor;
+	int digito1;
+	int digito2;
+	int digito3;
+	int multiplicador;
 } OVC;
+
+//Estrutura para representar uma cor em RGB
+typedef struct {
+	unsigned char r, g, b;
+} Color;
+
+// Estrutura para mapear cores
+typedef struct {
+	Color color;
+	int value;
+} ColorMapping;
+
+typedef struct {
+	int x;
+	int y;
+	int width;
+	int height;
+} BoundingBox;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //                    PROTÓTIPOS DE FUNÇÕES
@@ -146,6 +169,18 @@ int vc_gray_histogram_show(IVC* src, IVC* dst);
 
 // 
 int vc_hsv_to_binary(IVC* src, IVC* dst);
+
+int vc_binary_blob_info(IVC* src, OVC* blobs, int nblobs);
+
+int vc_desenha_box(IVC* imagem2, OVC* blobs, int nblobs, int* frame);
+
+int vc_desenha_centroide(IVC* src, OVC* blobs, int nblobs);
+
+int detectColor(Color pixel);
+
+int calculateResistance(int* digits, int size);
+
+void detectResistors(IVC* frame, IVC* binary_frame);
 
 //int vc_draw_center_of_mass(IVC* src, OVC* blobs, int nblobs, int tamanho_alvo, int cor);
 //int vc_normalizar_imagem_labelling(IVC* src, IVC* dst, int nblobs);
